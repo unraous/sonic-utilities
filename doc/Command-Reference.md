@@ -2717,81 +2717,101 @@ Go Back To [Beginning of the document](#) or [Beginning of this section](#bfd)
 
 IS-IS requires `DEVICE_METADATA|localhost` field
 `frr_mgmt_framework_config="true"` and a restart of the affected bgp container.
-Enable the process before configuring NET, level, hostname or timers, and before
-enabling interfaces. Non-default VRFs must already exist. Use interface names;
-aliases are accepted in alias naming mode. PortChannel/VLAN members are rejected.
+The baseline is FRR 10.7.1 (`10.7.1-sonic-0`). Add a named instance before
+configuring its attributes or binding interfaces. Non-default VRFs must exist;
+interfaces bind to a single same-VRF instance in their actual VRF. Aliases are
+accepted in alias naming mode. PortChannel member ports are rejected.
+All three groups accept group-level `--namespace NAMESPACE`.
 
 ### IS-IS show commands
 
 ```
-show isis summary [-j|--json] [-n NAMESPACE]
-show isis neighbor [-j|--json] [-n NAMESPACE]
-show isis database [detail] [-j|--json] [-n NAMESPACE]
-show isis interface [-j|--json] [-n NAMESPACE]
+show isis configuration [--vrf VRF] [--instance INSTANCE]
+show isis summary [--vrf VRF|all] [--json]
+show isis interface [IFNAME|--detail] [--vrf VRF|all] [--json]
+show isis neighbor [SYSTEM-ID|--detail] [--vrf VRF|all] [--json]
+show isis database [LSP-ID] [--detail] [--vrf VRF|all] [--json]
+show isis route [--level level-1|level-2] [--prefix-sid] [--backup] [--algorithm 128-255|all] [--vrf VRF|all] [--json]
+show isis topology [--level level-1|level-2] [--algorithm 128-255|all] [--vrf VRF|all] [--json]
+show isis hostname [--vrf VRF|all]
+show isis spf-delay-ietf [--vrf VRF|all]
+show isis flex-algo [128-255] [--vrf VRF|all]
+show isis fast-reroute summary [--level level-1|level-2] [--vrf VRF|all]
+show isis segment-routing node [--algorithm 128-255|all]
+show isis mpls-te router [--vrf VRF|all]
+show isis mpls-te interface [IFNAME]
+show isis mpls-te database [vertex [ID]|edge [IP]|subnet [PREFIX]] [--detail|--json] [--vrf VRF|all]
+show isis mpls ldp-sync [interface IFNAME|all]
 ```
 
 ### IS-IS config commands
 
 ```
-config isis [-n NAMESPACE] enable [VRF]
-config isis [-n NAMESPACE] disable [VRF]
-config isis [-n NAMESPACE] add [VRF]
-config isis [-n NAMESPACE] del [VRF]
-config isis [-n NAMESPACE] net NET [VRF]
-config isis [-n NAMESPACE] level {level-1|level-2|level-1-2} [VRF]
-config isis [-n NAMESPACE] hostname {enable|disable} [VRF]
-config isis [-n NAMESPACE] ipv6-multi-topology {enable|disable} [VRF]
-config isis [-n NAMESPACE] timer lsp-mtu MTU [VRF]
-config isis [-n NAMESPACE] timer lsp-refresh SECONDS [VRF]
-config isis [-n NAMESPACE] timer lsp-lifetime SECONDS [VRF]
-config isis [-n NAMESPACE] reset {net|level|hostname|ipv6-multi-topology|lsp-mtu|lsp-refresh|lsp-lifetime} [VRF]
-config interface [-n NAMESPACE] isis enable INTERFACE
-config interface [-n NAMESPACE] isis disable INTERFACE
-config interface [-n NAMESPACE] isis add INTERFACE
-config interface [-n NAMESPACE] isis del INTERFACE
-config interface [-n NAMESPACE] isis metric INTERFACE METRIC
-config interface [-n NAMESPACE] isis circuit-type INTERFACE {p2p|lan}
-config interface [-n NAMESPACE] isis passive INTERFACE {enable|disable}
-config interface [-n NAMESPACE] isis ipv4 INTERFACE {enable|disable}
-config interface [-n NAMESPACE] isis ipv6 INTERFACE {enable|disable}
-config interface [-n NAMESPACE] isis reset INTERFACE {metric|circuit-type|passive|ipv4|ipv6}
+config isis add INSTANCE
+config isis del INSTANCE
+config isis net INSTANCE NET
+config isis net del INSTANCE NET
+config isis level INSTANCE {level-1|level-2|level-1-2}
+config isis {dynamic-hostname|ipv6-multi-topology|overload} INSTANCE {enable|disable}
+config isis lsp-mtu INSTANCE BYTES
+config isis overload-on-startup INSTANCE SECONDS
+config isis {lsp-refresh-interval|max-lsp-lifetime|lsp-gen-interval|spf-interval} INSTANCE SECONDS [--level level-1|level-2|both]
+config isis spf-backoff INSTANCE --init-delay MS --short-delay MS --long-delay MS --hold-down MS --time-to-learn MS
+config isis spf-backoff del INSTANCE
+config isis reset INSTANCE {level|dynamic-hostname|lsp-mtu|ipv6-multi-topology|overload|overload-on-startup}
+config isis reset INSTANCE {lsp-refresh-interval|max-lsp-lifetime|lsp-gen-interval|spf-interval} [--level level-1|level-2|both]
+config interface isis {ipv4|ipv6} IFNAME enable --instance INSTANCE
+config interface isis {ipv4|ipv6} IFNAME disable
+config interface isis del IFNAME
+config interface isis passive IFNAME {enable|disable}
+config interface isis level IFNAME {level-1|level-2|level-1-2}
+config interface isis network-type IFNAME {lan|p2p}
+config interface isis {metric|hello-interval|hello-multiplier} IFNAME VALUE [--level level-1|level-2|both]
+config interface isis reset IFNAME {level|network-type|passive}
+config interface isis reset IFNAME {metric|hello-interval|hello-multiplier} [--level level-1|level-2|both]
+config isis redistribute add INSTANCE AF SOURCE {level-1|level-2} [--table-id 1-65535] [--metric VALUE] [--route-map NAME]
+config isis redistribute del INSTANCE AF SOURCE {level-1|level-2} [--table-id 1-65535]
 ```
 
-VRF defaults to `default`. NET must contain a system-id and end in `.00`.
-LSP MTU accepts 128–4352 (default 1497), refresh accepts 1–65235 seconds
-(default 900), lifetime accepts 350–65535 seconds (default 1200), and lifetime
-must be at least refresh + 300. Interface metric accepts 1–16777215 (default 10).
-Circuit type defaults to LAN; passive defaults to off. Reset removes the selected
-field, restoring its default (or removing NET). Disable retains configuration;
-re-enable restores it. `add` creates disabled configuration and preserves existing
-values. Edits and resets require configured objects, but do not require them to
-be enabled. Parent `del` refuses while any interface rows remain, even disabled
-ones; use interface `del` first. Interface `del` also cleans up stale configuration
-after a routed interface disappears. Hostname uses `enable|disable`.
+Configuration commands accept `--vrf VRF`, default `default` (omitted above).
+Per-level commands default to both; levels are saved independently. Runtime
+interface level is the intersection with parent level; empty intersection is
+rejected. Instance row existence creates the instance; repeat add preserves it.
+Parent del requires interface cleanup and removes its redistribution rows.
+NETs in one VRF share a system ID; NET del must match the saved value.
+Instance deletion, NET deletion and replacement use the corresponding FRR
+commands. FRR owns the shared system-ID runtime state.
 
-IPv4 and IPv6 bindings are controlled independently through
-`ISIS_INTERFACE.ipv4_enabled` and `ipv6_enabled`. Both fields default to true;
-reset removes the selected field and restores that default. Disabling both
-families retains the configured interface settings without an IS-IS circuit.
-These controls require backend/YANG support from the matching IS-IS implementation.
-For an IPv6-only interface, enable IS-IS on the interface and then run
-`config interface isis ipv4 INTERFACE disable`.
+LSP MTU is 128–4352 bytes (default 1497), refresh 1–65235 seconds (900),
+lifetime 350–65535 seconds (1200), generation 1–120 seconds (30) and minimum
+SPF interval 1–120 seconds (1). Each level requires lifetime >= refresh + 300
+and generation < refresh. Backoff requires all five 0–60000 ms values with
+hold-down > time-to-learn. Startup overload is 0–86400 seconds (0).
+Dynamic hostname defaults on; IPv6 multi-topology and overload default off.
 
-`config isis ipv6-multi-topology` controls `ISIS_GLOBALS.ipv6_multi_topology`
-for the selected VRF and namespace. The schema default is true; reset removes
-only that field. The IS-IS process must exist before changing or resetting
-this setting; disabled configurations can be edited. This selects IPv6 multi-topology mode; it does not enable or disable
-the IPv6 binding on individual interfaces.
+AFs default off; enabling one creates the interface row. Disabling the final AF
+deletes all interface parameters; re-enable uses defaults. AF has no reset.
+Reset clears selected explicit fields while preserving siblings and the row.
+Metric is 0–16777215 (10), Hello interval 1–600 seconds (3), multiplier 2–100
+(10), network type LAN and passive off. P2P uses L1 Hello and retains L2 values.
+IPv6 multi-topology is independent of interface IPv6 enable.
+
+Redistribution AF is ipv4/ipv6. Table sources require table-id; ordinary sources
+reject it and save key ID 0. Metric defaults to 0. Add fully replaces the same-key
+policy, removing an omitted route-map. Each table ID and target level has its own
+row. Sources follow FRR 10.7.1 per AF; sharp requires sharpd.
+Save persistent configuration with `config save -y`. Configuration show reads
+explicit/effective ConfigDB values; the other queries read FRR runtime state.
 
 Example, after enabling management-framework mode:
 
 ```shell
-sudo config isis enable
-sudo config isis net 49.0001.0000.0000.0001.00
-sudo config isis level level-2
-sudo config interface isis enable Ethernet0
-sudo config interface isis circuit-type Ethernet0 p2p
-sudo config interface isis enable Loopback0
+sudo config isis add CORE
+sudo config isis net CORE 49.0001.0000.0000.0001.00
+sudo config isis level CORE level-2
+sudo config interface isis ipv4 Ethernet0 enable --instance CORE
+sudo config interface isis network-type Ethernet0 p2p
+sudo config interface isis ipv4 Loopback0 enable --instance CORE
 sudo config interface isis passive Loopback0 enable
 show isis interface
 show isis neighbor
